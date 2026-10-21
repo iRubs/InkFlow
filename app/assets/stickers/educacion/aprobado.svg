@@ -1,0 +1,15 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 200" width="200" height="200">
+  <defs>
+    <linearGradient id="gradApr" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#059669" />
+      <stop offset="100%" stop-color="#047857" />
+    </linearGradient>
+    <filter id="shadowApr" x="-10%" y="-10%" width="120%" height="120%">
+      <feDropShadow dx="2" dy="4" stdDeviation="3" flood-opacity="0.25"/>
+    </filter>
+  </defs>
+  <path d="M100 15 L125 65 L180 75 L140 115 L150 170 L100 145 L50 170 L60 115 L20 75 L75 65 Z" fill="url(#gradApr)" filter="url(#shadowApr)" stroke="#6EE7B7" stroke-width="3"/>
+  <circle cx="100" cy="100" r="45" fill="#FFFFFF" opacity="0.95"/>
+  <text x="100" y="96" font-family="Arial, sans-serif" font-weight="900" font-size="14" fill="#065F46" text-anchor="middle" letter-spacing="1">APROBADO</text>
+  <text x="100" y="118" font-family="Arial, sans-serif" font-weight="900" font-size="20" fill="#059669" text-anchor="middle">10 / 10</text>
+</svg>

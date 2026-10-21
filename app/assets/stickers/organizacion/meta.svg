@@ -1,0 +1,20 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 200" width="200" height="200">
+  <defs>
+    <filter id="shadowMeta" x="-10%" y="-10%" width="120%" height="120%">
+      <feDropShadow dx="2" dy="4" stdDeviation="3" flood-opacity="0.25"/>
+    </filter>
+  </defs>
+  <!-- Target circles -->
+  <circle cx="100" cy="95" r="75" fill="#EF4444" filter="url(#shadowMeta)"/>
+  <circle cx="100" cy="95" r="56" fill="#FFFFFF"/>
+  <circle cx="100" cy="95" r="38" fill="#EF4444"/>
+  <circle cx="100" cy="95" r="19" fill="#FFFFFF"/>
+  <circle cx="100" cy="95" r="8" fill="#FACC15"/>
+  <!-- Arrow -->
+  <path d="M145 50 L98 97" stroke="#1E293B" stroke-width="5" stroke-linecap="round"/>
+  <polygon points="98,97 105,82 113,90" fill="#1E293B"/>
+  <polygon points="145,50 152,38 138,45" fill="#3B82F6"/>
+  <!-- Text pill -->
+  <rect x="45" y="160" width="110" height="28" rx="8" fill="#1E293B"/>
+  <text x="100" y="179" font-family="Arial, sans-serif" font-weight="900" font-size="15" fill="#FFFFFF" text-anchor="middle" letter-spacing="2">META</text>
+</svg>

@@ -1,0 +1,14 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 200" width="200" height="200">
+  <defs>
+    <linearGradient id="heartGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#F43F5E" />
+      <stop offset="100%" stop-color="#BE123C" />
+    </linearGradient>
+    <filter id="heartShadow" x="-10%" y="-10%" width="120%" height="120%">
+      <feDropShadow dx="2" dy="5" stdDeviation="4" flood-opacity="0.3"/>
+    </filter>
+  </defs>
+  <path d="M100 170 C20 120 15 50 65 40 C85 35 100 55 100 55 C100 55 115 35 135 40 C185 50 180 120 100 170 Z" fill="url(#heartGrad)" filter="url(#heartShadow)" stroke="#FDA4AF" stroke-width="3"/>
+  <!-- Highlight shine -->
+  <path d="M50 60 C55 45 75 45 80 55" stroke="#FFFFFF" stroke-width="4" stroke-linecap="round" fill="none" opacity="0.6"/>
+</svg>

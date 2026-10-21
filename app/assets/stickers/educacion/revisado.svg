@@ -1,0 +1,18 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 200" width="200" height="200">
+  <defs>
+    <linearGradient id="gradRev" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#3B82F6" />
+      <stop offset="100%" stop-color="#1D4ED8" />
+    </linearGradient>
+    <filter id="shadowRev" x="-10%" y="-10%" width="120%" height="120%">
+      <feDropShadow dx="2" dy="4" stdDeviation="3" flood-opacity="0.25"/>
+    </filter>
+  </defs>
+  <rect x="18" y="30" width="164" height="140" rx="20" fill="url(#gradRev)" filter="url(#shadowRev)" stroke="#93C5FD" stroke-width="3"/>
+  <rect x="28" y="40" width="144" height="120" rx="14" fill="none" stroke="#FFFFFF" stroke-width="2" stroke-dasharray="5,3"/>
+  <!-- Checkmark icon -->
+  <circle cx="100" cy="80" r="30" fill="#FFFFFF" opacity="0.2"/>
+  <path d="M84 80 L95 91 L118 68" fill="none" stroke="#FFFFFF" stroke-width="6" stroke-linecap="round" stroke-linejoin="round"/>
+  <!-- Text -->
+  <text x="100" y="134" font-family="Arial, sans-serif" font-weight="900" font-size="20" fill="#FFFFFF" text-anchor="middle" letter-spacing="2">REVISADO</text>
+</svg>

@@ -1,0 +1,18 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 200" width="200" height="200">
+  <defs>
+    <linearGradient id="gradExc" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#10B981" />
+      <stop offset="100%" stop-color="#059669" />
+    </linearGradient>
+    <filter id="shadow" x="-10%" y="-10%" width="120%" height="120%">
+      <feDropShadow dx="2" dy="4" stdDeviation="3" flood-opacity="0.25"/>
+    </filter>
+  </defs>
+  <circle cx="100" cy="100" r="88" fill="url(#gradExc)" filter="url(#shadow)" stroke="#34D399" stroke-width="4"/>
+  <circle cx="100" cy="100" r="76" fill="none" stroke="#FFFFFF" stroke-width="2" stroke-dasharray="6,4"/>
+  <!-- Star -->
+  <polygon points="100,38 107,58 128,58 111,71 117,91 100,78 83,91 89,71 72,58 93,58" fill="#FDE047" stroke="#F59E0B" stroke-width="1.5"/>
+  <!-- Text -->
+  <text x="100" y="124" font-family="Arial, sans-serif" font-weight="900" font-size="22" fill="#FFFFFF" text-anchor="middle" letter-spacing="2">EXCELENTE</text>
+  <text x="100" y="148" font-family="Arial, sans-serif" font-weight="700" font-size="14" fill="#D1FAE5" text-anchor="middle" letter-spacing="1">★ ★ ★ ★ ★</text>
+</svg>

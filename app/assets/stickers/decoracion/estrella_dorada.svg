@@ -1,0 +1,16 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 200" width="200" height="200">
+  <defs>
+    <linearGradient id="starGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#FDE047" />
+      <stop offset="50%" stop-color="#FACC15" />
+      <stop offset="100%" stop-color="#EAB308" />
+    </linearGradient>
+    <filter id="starGlow" x="-20%" y="-20%" width="140%" height="140%">
+      <feDropShadow dx="0" dy="4" stdDeviation="5" flood-color="#CA8A04" flood-opacity="0.35"/>
+    </filter>
+  </defs>
+  <polygon points="100,15 125,72 186,75 138,114 154,174 100,138 46,174 62,114 14,75 75,72" fill="url(#starGrad)" filter="url(#starGlow)" stroke="#CA8A04" stroke-width="3"/>
+  <!-- Highlight facet -->
+  <polygon points="100,15 100,138 125,72" fill="#FEF9C3" opacity="0.6"/>
+  <polygon points="100,138 138,114 186,75" fill="#FEF08A" opacity="0.4"/>
+</svg>

@@ -1,0 +1,16 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 200" width="200" height="200">
+  <defs>
+    <linearGradient id="gradUrg" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#EF4444" />
+      <stop offset="100%" stop-color="#B91C1C" />
+    </linearGradient>
+    <filter id="shadowUrg" x="-10%" y="-10%" width="120%" height="120%">
+      <feDropShadow dx="2" dy="4" stdDeviation="3" flood-opacity="0.3"/>
+    </filter>
+  </defs>
+  <polygon points="100,20 185,170 15,170" fill="url(#gradUrg)" filter="url(#shadowUrg)" stroke="#FCA5A5" stroke-width="4"/>
+  <path d="M100 65 L100 115" stroke="#FFFFFF" stroke-width="8" stroke-linecap="round"/>
+  <circle cx="100" cy="138" r="5" fill="#FFFFFF"/>
+  <rect x="35" y="145" width="130" height="26" rx="6" fill="#7F1D1D" opacity="0.9"/>
+  <text x="100" y="163" font-family="Arial, sans-serif" font-weight="900" font-size="14" fill="#FFFFFF" text-anchor="middle" letter-spacing="2">URGENTE</text>
+</svg>

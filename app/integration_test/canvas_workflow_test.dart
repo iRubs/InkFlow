@@ -22,7 +22,7 @@ import '../test/infinite_canvas_test.dart' show BytesOnlyPicker, photo;
 void main() {
   IntegrationTestWidgetsFlutterBinding.ensureInitialized();
   testWidgets(
-    'Imagen, tinta y cámara persisten fuera de la hoja; PDF de tres páginas',
+    'Hoja continua: imagen, tinta y cámara persisten; PDF de tres páginas',
     (tester) async {
       final temp = await Directory.systemTemp.createTemp(
         'inkflow_native_canvas_',
@@ -54,8 +54,8 @@ void main() {
             .widget<InfiniteCanvasViewport>(find.byType(InfiniteCanvasViewport))
             .controller;
         camera.value = Matrix4.diagonal3Values(1.5, 1.5, 1)
-          ..setEntry(0, 3, -8000)
-          ..setEntry(1, 3, 3000);
+          ..setEntry(0, 3, -100)
+          ..setEntry(1, 3, -3000);
         await tester.pumpAndSettle();
         await tester.tap(find.byTooltip('Añadir imagen'));
         await tester.pumpAndSettle();
@@ -70,7 +70,9 @@ void main() {
               .distance,
           lessThan(1),
         );
-        await tester.tap(find.byTooltip('Bolígrafo'));
+        await tester.tap(find.byKey(const ValueKey('choose-pen')));
+        await tester.pumpAndSettle();
+        await tester.tap(find.text('Bolígrafo'));
         await tester.pumpAndSettle();
         final origin = tester.getTopLeft(
           find.byKey(const ValueKey('ink-canvas-input')),
@@ -89,10 +91,11 @@ void main() {
             jsonDecode(await file.readAsString()) as Map<String, dynamic>;
         expect(saved['images'], hasLength(1));
         expect(saved['strokes'], hasLength(1));
-        expect((saved['images'][0]['x'] as num), greaterThan(5000));
+        expect((saved['images'][0]['x'] as num), inInclusiveRange(0, 820));
+        expect(saved['pageLayout'], 'vertical');
         expect(
           (saved['strokes'][0]['points'][0]['x'] as num),
-          greaterThan(5000),
+          inInclusiveRange(0, 820),
         );
         const outputDir = String.fromEnvironment('INKFLOW_TEST_ARTIFACTS');
         if (outputDir.isNotEmpty) {
@@ -102,7 +105,7 @@ void main() {
                   .toImage(pixelRatio: 1);
           final bytes = await image.toByteData(format: ui.ImageByteFormat.png);
           await Directory(outputDir).create(recursive: true);
-          await File('$outputDir/canvas-1.1-infinite.png')
+          await File('$outputDir/canvas-1.3-vertical.png')
               .writeAsBytes(bytes!.buffer.asUint8List());
           image.dispose();
         }
@@ -138,8 +141,8 @@ void main() {
         final restored = tester
             .widget<InfiniteCanvasViewport>(find.byType(InfiniteCanvasViewport))
             .controller;
-        expect(restored.value.entry(0, 3), -8000);
-        expect(restored.value.entry(1, 3), 3000);
+        expect(restored.value.entry(0, 3), -100);
+        expect(restored.value.entry(1, 3), -3000);
         expect(restored.value.getMaxScaleOnAxis(), 1.5);
         expect(tester.takeException(), isNull);
       } finally {

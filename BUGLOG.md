@@ -6,6 +6,12 @@ Cada bug encontrado durante el desarrollo se documenta aquí con su causa raíz,
 
 ## Bugs Resueltos
 
+### Hoja y controles en tablet — 1.3, 2026-10-24
+- **Descripción**: el lienzo se extendía también hacia arriba y a los lados; los controles de lápiz, grosor y color quedaban ocultos en una barra horizontal larga.
+- **Causa**: navegación sin límites en ambos ejes y dos contenedores de desplazamiento horizontal para las herramientas principales.
+- **Solución**: ancho de hoja 820 ajustado a pantalla y extensión vertical, límites de cámara/trazos/objetos y barra superior medida con una o dos filas. Los documentos antiguos que necesitan el espacio libre conservan sus coordenadas y cámara.
+- **Pruebas**: límites y desplazamiento, trazo con ajustes reales de tipo/grosor/color, rotación/texto ampliado, duplicado junto al borde, reapertura y PDF multipágina en motor nativo. Suite completa: 79 pruebas.
+
 ### BUG-001: Conflicto de versiones entre `intl` y `flutter_localizations`
 - **Descripción**: `flutter pub get` falló al intentar resolver dependencias con `intl: ^0.19.0`.
 - **Causa raíz**: El SDK de Flutter 3.47.7 incluye `flutter_localizations` que exige estrictamente `intl: ^0.20.3`.

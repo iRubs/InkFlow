@@ -204,11 +204,10 @@ void main() {
       // Verificar presencia del icono de Regla Virtual
       expect(find.byIcon(Icons.straighten_rounded), findsOneWidget);
 
-      // Verificar presencia de iconos de Fase 4 (Paleta HSV, Gotero, Stickers, Fuentes)
-      expect(find.byIcon(Icons.palette_rounded), findsOneWidget);
-      expect(find.byIcon(Icons.colorize_rounded), findsOneWidget);
-      expect(find.byIcon(Icons.interests_rounded), findsOneWidget);
-      expect(find.byIcon(Icons.font_download_rounded), findsOneWidget);
+      expect(find.text('Lápiz'), findsOneWidget);
+      expect(find.text('Color'), findsOneWidget);
+      expect(find.text('Grosor'), findsOneWidget);
+      expect(find.byTooltip('Más herramientas'), findsOneWidget);
 
       // Verificar que el widget interactivo está en el árbol
       expect(find.byType(InfiniteCanvasViewport), findsOneWidget);

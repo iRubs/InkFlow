@@ -37,6 +37,7 @@ class CanvasPainter extends CustomPainter {
 
   // Modo de página
   final bool isFixedPage;
+  final bool isVerticalPage;
   final Size pageSize; // Ej. A4 (794 x 1123 pt)
 
   // Anotaciones de texto y fuente bonita
@@ -59,6 +60,7 @@ class CanvasPainter extends CustomPainter {
     this.rulerAngle = 0.0,
     this.rulerLength = 400.0,
     this.isFixedPage = false,
+    this.isVerticalPage = false,
     this.pageSize = const Size(820, 1160),
   });
 
@@ -67,7 +69,16 @@ class CanvasPainter extends CustomPainter {
     canvas.save();
     if (viewTransform != null) canvas.transform(viewTransform!.storage);
     final visible = visibleRect ?? (Offset.zero & size);
-    final effectiveRect = isFixedPage ? Offset.zero & pageSize : visible;
+    final effectiveRect = isFixedPage
+        ? Offset.zero & pageSize
+        : isVerticalPage
+        ? Rect.fromLTRB(
+            0,
+            max(0, visible.top),
+            pageSize.width,
+            max(0, visible.bottom),
+          )
+        : visible;
 
     // 1. En modo página fija, dibujar sombra exterior del papel
     if (isFixedPage) {
@@ -90,9 +101,19 @@ class CanvasPainter extends CustomPainter {
     } else {
       // Modo lienzo infinito
       final bgPaint = Paint()..color = paperColor;
-      canvas.drawRect(visible, bgPaint);
+      canvas.drawRect(isVerticalPage ? effectiveRect : visible, bgPaint);
     }
 
+    if (isVerticalPage) {
+      canvas.clipRect(
+        Rect.fromLTWH(
+          0,
+          0,
+          pageSize.width,
+          max(pageSize.height, visible.bottom),
+        ),
+      );
+    }
     // 2. Dibujar plantilla de papel seleccionada
     _drawTemplate(canvas, effectiveRect);
 

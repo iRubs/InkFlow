@@ -1,5 +1,11 @@
 # InkFlow — Instalación y compilación
 
+## Actualización vigente: 1.3.0
+
+La entrega actual de Android es `builds/InkFlow-1.3.0.apk`, también disponible como `builds/InkFlow.apk`. Tiene código de versión 4 y la misma firma que las entregas anteriores. Elige **Actualizar** al abrirlo en Android; no desinstales para conservar los apuntes. La guía de hoja continua y herramientas está en [UPDATE_1.3.md](UPDATE_1.3.md). El instalador de Windows de esta entrega se identifica como versión 1.3.0.
+
+Las secciones históricas de 1.1/1.2 de este documento describen esos paquetes; los APK anteriores y sus hashes se conservan en `builds/archive/`.
+
 ## Windows 10/11 x64
 
 Ejecuta `builds/InkFlow-Setup.exe`. La instalación es por usuario en `%LOCALAPPDATA%/Programs/InkFlow` y crea un acceso en Inicio. La opción de acceso en Escritorio es voluntaria. Se incluyen Flutter, PDFium, complementos y el runtime redistribuible de Visual C++ junto al ejecutable. Desinstalar no borra los apuntes de Documentos/InkFlowData.

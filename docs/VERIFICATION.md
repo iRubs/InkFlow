@@ -1,5 +1,16 @@
 # InkFlow — Verificación de la continuación
 
+## Actualización 1.3 — 2026-10-24
+
+- **79 pruebas automatizadas** aprobadas (`logs/tests-1.3.log`). Las cinco nuevas comprueban límites de papel, navegación vertical, duplicado junto al borde, selección efectiva de tipo/grosor/color, rotación, texto ampliado y renderizado de la barra en tablet.
+- Analizador sin incidencias (`logs/analyze-1.3.log`) y formato: **445 archivos, cero cambios** (`logs/format-1.3.log`).
+- Integración nativa del lienzo aprobada en Windows: importación y movimiento de imagen, selección de bolígrafo, tinta, persistencia del modo vertical y cámara, reapertura y exportación/renderizado real de tres páginas PDF (`logs/integration-canvas-1.3.log`).
+- Se inspeccionaron las capturas `logs/canvas-1.3-vertical.png` (motor nativo) y `logs/vertical-canvas-1.3.png` (formato de tablet 800 × 1200). Son datos sintéticos de prueba.
+- Las notas antiguas con coordenadas exteriores conservan su modo libre y cámara; las pruebas heredadas de exportación de coordenadas negativas siguen pasando. Las notas nuevas y las antiguas sin contenido exterior usan ancho 820 y continuidad vertical.
+- El APK es ARM64, versión 1.3.0/código 4, y mantiene la clave de firma anterior. Los detalles de empaquetado y comprobación se conservan en los registros `build-android-1.3.log` y `apk-verification-1.3.log`.
+
+El S Pen, el rechazo de palma específico de Samsung y la instalación física en la tablet siguen pendientes de comprobación en el dispositivo del usuario. Las cuatro integraciones nativas de 1.2 descritas más abajo corresponden a esa entrega; en 1.3 se repitió la del lienzo afectado por estos cambios.
+
 Fecha de cierre: 2026-10-19. Entorno real: Flutter 3.47.7, Dart 3.13.5, Windows 11, Visual Studio Build Tools 2026, JDK 21 y Android SDK 36.
 
 ## Auditoría automatizada

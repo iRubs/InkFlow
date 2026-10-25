@@ -44,7 +44,7 @@ void main() {
       ) as Map<String, dynamic>;
 
       expect(manifestJson['app'], equals('InkFlow'));
-      expect(manifestJson['version'], equals('1.2.0'));
+      expect(manifestJson['version'], equals('1.3.0'));
       expect(manifestJson['schemaVersion'], equals(1));
     });
 

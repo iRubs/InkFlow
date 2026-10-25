@@ -1,5 +1,5 @@
 #define AppName "InkFlow"
-#define AppVersion "1.2.0"
+#define AppVersion "1.3.0"
 [Setup]
 AppId={{B13D2420-0834-480D-B65D-5FD0E683D738}
 AppName={#AppName}

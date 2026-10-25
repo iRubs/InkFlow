@@ -1,1 +1,1 @@
-const inkFlowVersion = '1.2.0';
+const inkFlowVersion = '1.3.0';

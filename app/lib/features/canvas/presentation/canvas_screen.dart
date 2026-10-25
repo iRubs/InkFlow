@@ -118,9 +118,11 @@ class _CanvasScreenState extends ConsumerState<CanvasScreen>
   bool _strictPalmRejection = true;
   bool _autoShapeCorrection = true;
   bool _isFixedPage = false;
+  bool _isFreeCanvas = false;
   bool _showRuler = false;
   bool _importingImage = false;
   bool _cameraInitialized = false;
+  bool _hasViewport = false;
   Size _viewportSize = const Size(820, 1160);
   double get _zoom => _transformationController.value.entry(0, 0);
   Offset _toScreen(Offset point) =>
@@ -136,7 +138,37 @@ class _CanvasScreenState extends ConsumerState<CanvasScreen>
     if (mounted) setState(() {});
   }
 
+  bool get _isVerticalPage => !_isFixedPage && !_isFreeCanvas;
+  double get _fitWidthScale =>
+      ((_viewportSize.width - 24) / 820).clamp(0.1, 5.0);
+
+  Offset _onPaper(Offset point) => _isFreeCanvas
+      ? point
+      : Offset(
+          point.dx.clamp(0, 820),
+          _isFixedPage ? point.dy.clamp(0, 1160) : max(0, point.dy),
+        );
+
+  Offset _placeOnPaper(Offset point, Size size) => _isFreeCanvas
+      ? point
+      : Offset(
+          point.dx.clamp(0, max(0, 820 - size.width)),
+          _isFixedPage
+              ? point.dy.clamp(0, max(0, 1160 - size.height))
+              : max(0, point.dy),
+        );
+
   void _fitView({bool origin = false}) {
+    if (_isVerticalPage) {
+      final scale = _fitWidthScale;
+      final top = origin ? 0.0 : max(0.0, _contentBounds.top - 24);
+      _transformationController.value = Matrix4.identity()
+        ..setEntry(0, 0, scale)
+        ..setEntry(1, 1, scale)
+        ..setEntry(0, 3, (_viewportSize.width - 820 * scale) / 2)
+        ..setEntry(1, 3, 12 - top * scale);
+      return;
+    }
     final bounds = _isFixedPage
         ? const Rect.fromLTWH(0, 0, 820, 1160)
         : origin
@@ -164,7 +196,10 @@ class _CanvasScreenState extends ConsumerState<CanvasScreen>
   );
 
   void _setPageMode(bool fixed) {
-    setState(() => _isFixedPage = fixed);
+    setState(() {
+      _isFixedPage = fixed;
+      _isFreeCanvas = false;
+    });
     _fitView();
     _autoSave();
   }
@@ -257,7 +292,7 @@ class _CanvasScreenState extends ConsumerState<CanvasScreen>
         if (mounted) {
           _isFixedPage = data['isFixedPage'] as bool? ?? _isFixedPage;
           final camera = data['camera'];
-          if (camera is Map) {
+          if (camera is Map && (data['pageLayout'] != null || _isFixedPage)) {
             final x = (camera['x'] as num?)?.toDouble();
             final y = (camera['y'] as num?)?.toDouble();
             final zoom = (camera['zoom'] as num?)?.toDouble();
@@ -306,6 +341,35 @@ class _CanvasScreenState extends ConsumerState<CanvasScreen>
             _textAnnotations.addAll(textList);
             _stickers.addAll(stickersList);
             _images.addAll(imagesList);
+            // Preserve old free-canvas notes with off-page content, without
+            // moving or clipping their annotations during an app update.
+            final bounds = _contentBounds.deflate(32);
+            _isFreeCanvas =
+                data['pageLayout'] == 'free' ||
+                (data['pageLayout'] == null &&
+                    !_isFixedPage &&
+                    (bounds.left < -16 ||
+                        bounds.right > 836 ||
+                        bounds.top < -16));
+            if (_isFreeCanvas && camera is Map) {
+              final x = (camera['x'] as num?)?.toDouble();
+              final y = (camera['y'] as num?)?.toDouble();
+              final z = (camera['zoom'] as num?)?.toDouble();
+              if (x != null &&
+                  y != null &&
+                  z != null &&
+                  x.isFinite &&
+                  y.isFinite &&
+                  z >= 0.1 &&
+                  z <= 5) {
+                _transformationController.value = Matrix4.identity()
+                  ..setEntry(0, 0, z)
+                  ..setEntry(1, 1, z)
+                  ..setEntry(0, 3, x)
+                  ..setEntry(1, 3, y);
+                _cameraInitialized = true;
+              }
+            }
           });
         }
       }
@@ -335,7 +399,12 @@ class _CanvasScreenState extends ConsumerState<CanvasScreen>
     if (_storageFile == null || _loadError != null) return;
     try {
       final data = {
-        'version': 5,
+        'version': 6,
+        'pageLayout': _isFreeCanvas
+            ? 'free'
+            : _isFixedPage
+            ? 'fixed'
+            : 'vertical',
         'camera': {
           'x': _transformationController.value.entry(0, 3),
           'y': _transformationController.value.entry(1, 3),
@@ -376,6 +445,7 @@ class _CanvasScreenState extends ConsumerState<CanvasScreen>
     List.of(_images),
     _activeTemplate,
     _isFixedPage,
+    _isFreeCanvas,
   );
 
   void _restoreSnapshot(_CanvasSnapshot snapshot) {
@@ -392,7 +462,13 @@ class _CanvasScreenState extends ConsumerState<CanvasScreen>
       ..clear()
       ..addAll(snapshot.images);
     _activeTemplate = snapshot.template;
+    final layoutChanged =
+        _isFixedPage != snapshot.fixed || _isFreeCanvas != snapshot.free;
     _isFixedPage = snapshot.fixed;
+    _isFreeCanvas = snapshot.free;
+    if (layoutChanged) {
+      _fitView();
+    }
     _selectedImageId = null;
     _selectedStickerId = null;
     _clearSelection();
@@ -477,6 +553,8 @@ class _CanvasScreenState extends ConsumerState<CanvasScreen>
       return;
     }
     if (_drawingPointer != null || _loadError != null) return;
+    final hit = _toScene(event.localPosition);
+    if (!_isFreeCanvas && (hit.dx < 0 || hit.dx > 820 || hit.dy < 0)) return;
     if (_isFixedPage &&
         !(const Rect.fromLTWH(
           0,
@@ -558,10 +636,10 @@ class _CanvasScreenState extends ConsumerState<CanvasScreen>
         : 0.5;
     final double tilt = event.tilt;
 
-    Offset strokePoint = scenePoint;
+    Offset strokePoint = _onPaper(scenePoint);
     // Si la regla está activa y el trazo está cerca del borde guía, ajustar al borde (Snap)
     if (_showRuler) {
-      strokePoint = _snapToRuler(strokePoint);
+      strokePoint = _onPaper(_snapToRuler(strokePoint));
     }
 
     setState(() {
@@ -602,7 +680,12 @@ class _CanvasScreenState extends ConsumerState<CanvasScreen>
 
     // Arrastre de trazos seleccionados con lazo
     if (_isDraggingSelection && _selectionDragStart != null) {
-      final delta = scenePoint - _selectionDragStart!;
+      var delta = scenePoint - _selectionDragStart!;
+      if (!_isFreeCanvas && _selectionBoundingBox != null) {
+        final box = _selectionBoundingBox!;
+        final target = _placeOnPaper(box.topLeft + delta, box.size);
+        delta = target - box.topLeft;
+      }
       _selectionDragStart = scenePoint;
       setState(() {
         final updated = _activeSelection.applyTranslation(_strokes, delta);
@@ -650,9 +733,9 @@ class _CanvasScreenState extends ConsumerState<CanvasScreen>
         : 0.5;
     final double tilt = event.tilt;
 
-    Offset strokePoint = scenePoint;
+    Offset strokePoint = _onPaper(scenePoint);
     if (_showRuler) {
-      strokePoint = _snapToRuler(strokePoint);
+      strokePoint = _onPaper(_snapToRuler(strokePoint));
     }
 
     setState(() {
@@ -792,7 +875,16 @@ class _CanvasScreenState extends ConsumerState<CanvasScreen>
 
   void _duplicateSelection() {
     if (_activeSelection.isEmpty) return;
-    final (updatedStrokes, newSelection) = _activeSelection.duplicate(_strokes);
+    var offset = const Offset(24, 24);
+    if (!_isFreeCanvas) {
+      final bounds = _activeSelection.computeBoundingBox(_strokes);
+      offset =
+          _placeOnPaper(bounds.topLeft + offset, bounds.size) - bounds.topLeft;
+    }
+    final (updatedStrokes, newSelection) = _activeSelection.duplicate(
+      _strokes,
+      offset: offset,
+    );
     setState(() {
       _strokes
         ..clear()
@@ -1112,7 +1204,10 @@ class _CanvasScreenState extends ConsumerState<CanvasScreen>
             assetPath: sticker.assetPath,
             filePath: sticker.filePath,
             isCustom: sticker.isCustom,
-            position: sceneCenter - const Offset(50, 50),
+            position: _placeOnPaper(
+              sceneCenter - const Offset(50, 50),
+              const Size(100, 100),
+            ),
             size: const Size(100, 100),
           );
 
@@ -1173,7 +1268,10 @@ class _CanvasScreenState extends ConsumerState<CanvasScreen>
                 final annotation = TextAnnotation(
                   id: _uuid.v4(),
                   text: text,
-                  position: sceneCenter - const Offset(60, 20),
+                  position: _placeOnPaper(
+                    sceneCenter - const Offset(60, 20),
+                    const Size(120, 40),
+                  ),
                   fontSize: 26.0,
                   fontFamily: _selectedHandwritingFont,
                   color: _activeColor,
@@ -1217,8 +1315,16 @@ class _CanvasScreenState extends ConsumerState<CanvasScreen>
             setState(() {
               final idx = _stickers.indexWhere((s) => s.id == sticker.id);
               if (idx != -1) {
-                _stickers[idx] = _stickers[idx].translate(
-                  details.delta / _zoom,
+                final item = _stickers[idx];
+                _stickers[idx] = item.translate(
+                  _placeOnPaper(
+                        item.position + details.delta / _zoom,
+                        Size(
+                          item.size.width * item.scale,
+                          item.size.height * item.scale,
+                        ),
+                      ) -
+                      item.position,
                 );
               }
             });
@@ -1316,7 +1422,7 @@ class _CanvasScreenState extends ConsumerState<CanvasScreen>
       importedPath = imported.path;
       if (!mounted) return;
       final maxWidth = min(
-        _isFixedPage ? 740.0 : double.infinity,
+        _isFreeCanvas ? double.infinity : 740.0,
         min(480.0, _viewportSize.width * 0.65) / _zoom,
       );
       final maxHeight = min(
@@ -1330,12 +1436,7 @@ class _CanvasScreenState extends ConsumerState<CanvasScreen>
       final width = imported.width * factor;
       final height = imported.height * factor;
       var position = _visibleCenter - Offset(width / 2, height / 2);
-      if (_isFixedPage) {
-        position = Offset(
-          position.dx.clamp(0, 820 - width),
-          position.dy.clamp(0, 1160 - height),
-        );
-      }
+      position = _placeOnPaper(position, Size(width, height));
       final image = CanvasImage(
         id: _uuid.v4(),
         filePath: imported.path,
@@ -1401,7 +1502,14 @@ class _CanvasScreenState extends ConsumerState<CanvasScreen>
             setState(() {
               final idx = _images.indexWhere((i) => i.id == image.id);
               if (idx != -1) {
-                _images[idx] = _images[idx].translate(details.delta / _zoom);
+                final item = _images[idx];
+                _images[idx] = item.translate(
+                  _placeOnPaper(
+                        item.position + details.delta / _zoom,
+                        Size(item.width * item.scale, item.height * item.scale),
+                      ) -
+                      item.position,
+                );
               }
             });
           },
@@ -1473,7 +1581,28 @@ class _CanvasScreenState extends ConsumerState<CanvasScreen>
                       setState(() {
                         final idx = _images.indexWhere((i) => i.id == image.id);
                         if (idx != -1) {
-                          _images[idx] = _images[idx].scaleBy(factor);
+                          var item = _images[idx].scaleBy(factor);
+                          if (!_isFreeCanvas) {
+                            final maxScale = min(
+                              820 / item.width,
+                              _isFixedPage
+                                  ? 1160 / item.height
+                                  : double.infinity,
+                            );
+                            item = item.copyWith(
+                              scale: min(item.scale, maxScale),
+                            );
+                            item = item.copyWith(
+                              position: _placeOnPaper(
+                                item.position,
+                                Size(
+                                  item.width * item.scale,
+                                  item.height * item.scale,
+                                ),
+                              ),
+                            );
+                          }
+                          _images[idx] = item;
                         }
                       });
                     },
@@ -1508,6 +1637,8 @@ class _CanvasScreenState extends ConsumerState<CanvasScreen>
         pageTitle: widget.page.title,
         canvasBounds: _isFixedPage
             ? const Rect.fromLTWH(0, 0, 820, 1160)
+            : _isVerticalPage
+            ? Rect.fromLTWH(0, 0, 820, max(1160, _contentBounds.bottom))
             : _contentBounds,
         paginateCanvas: !_isFixedPage,
         strokes: _strokes,
@@ -1550,213 +1681,242 @@ class _CanvasScreenState extends ConsumerState<CanvasScreen>
       appBar: AppBar(
         title: Text(widget.page.title),
         actions: [
-          IconButton(
-            icon: const Icon(Icons.undo_rounded),
-            tooltip: 'Deshacer (Ctrl+Z)',
-            onPressed: _undoHistory.isNotEmpty ? _undo : null,
-          ),
-          IconButton(
-            icon: const Icon(Icons.redo_rounded),
-            tooltip: 'Rehacer (Ctrl+Y)',
-            onPressed: _redoHistory.isNotEmpty ? _redo : null,
-          ),
-          IconButton(
-            icon: Icon(
-              Icons.straighten_rounded,
-              color: _showRuler ? InkColors.primary : null,
+          SizedBox(
+            width: min(
+              MediaQuery.sizeOf(context).width * 0.65,
+              _showRuler ? 432.0 : 384.0,
             ),
-            tooltip: 'Regla Virtual',
-            onPressed: () => setState(() => _showRuler = !_showRuler),
-          ),
-          if (_showRuler)
-            IconButton(
-              icon: const Icon(Icons.rotate_right_rounded),
-              tooltip: 'Rotar Regla (+15°)',
-              onPressed: () {
-                setState(() {
-                  _rulerAngle = (_rulerAngle + pi / 12) % (2 * pi);
-                });
-              },
-            ),
-          PopupMenuButton<String>(
-            icon: const Icon(Icons.dashboard_customize_outlined),
-            tooltip: 'Plantilla de Papel',
-            onSelected: (template) {
-              setState(() => _activeTemplate = template);
-              _autoSave();
-            },
-            itemBuilder: (context) => const [
-              PopupMenuItem(
-                value: 'ruled',
-                child: Text('Renglones con margen'),
-              ),
-              PopupMenuItem(
-                value: 'grid',
-                child: Text('Cuadrícula de ingeniería'),
-              ),
-              PopupMenuItem(value: 'dotted', child: Text('Punteado')),
-              PopupMenuItem(value: 'cornell', child: Text('Notas Cornell')),
-              PopupMenuItem(value: 'blank', child: Text('En Blanco')),
-            ],
-          ),
-          PopupMenuButton<String>(
-            icon: const Icon(Icons.font_download_rounded),
-            tooltip: 'Tipografía Manuscrita ("Fuente Bonita")',
-            onSelected: (font) {
-              setState(() => _selectedHandwritingFont = font);
-            },
-            itemBuilder: (context) => _fontManager.availableFonts.map((f) {
-              return PopupMenuItem(
-                value: f.name,
-                child: Row(
-                  children: [
-                    if (_selectedHandwritingFont == f.name)
-                      const Icon(
-                        Icons.check_rounded,
-                        size: 16,
-                        color: InkColors.primary,
-                      )
-                    else
-                      const SizedBox(width: 16),
-                    const SizedBox(width: 8),
-                    Text(f.displayName, style: TextStyle(fontFamily: f.name)),
-                  ],
-                ),
-              );
-            }).toList(),
-          ),
-          IconButton(
-            icon: const Icon(Icons.ios_share_rounded),
-            tooltip: 'Exportar Nota',
-            onPressed: _openExportDialog,
-          ),
-          PopupMenuButton<String>(
-            icon: const Icon(Icons.tune_rounded),
-            tooltip: 'Ajustes del Lienzo',
-            onSelected: (option) {
-              if (option == 'palm') {
-                setState(() => _strictPalmRejection = !_strictPalmRejection);
-              } else if (option == 'shape') {
-                setState(() => _autoShapeCorrection = !_autoShapeCorrection);
-              } else if (option == 'page_mode') {
-                _setPageMode(!_isFixedPage);
-              } else if (option == 'clear') {
-                _clearCanvas();
-              }
-            },
-            itemBuilder: (context) => [
-              CheckedPopupMenuItem(
-                value: 'palm',
-                checked: _strictPalmRejection,
-                child: const Text('Rechazo estricto de palma (Solo S Pen)'),
-              ),
-              CheckedPopupMenuItem(
-                value: 'shape',
-                checked: _autoShapeCorrection,
-                child: const Text('Autocorrección de formas geométricas'),
-              ),
-              CheckedPopupMenuItem(
-                value: 'page_mode',
-                checked: _isFixedPage,
-                child: const Text('Modo Hoja Fija (A4)'),
-              ),
-              const PopupMenuDivider(),
-              const PopupMenuItem(
-                value: 'clear',
-                child: Row(
-                  children: [
-                    Icon(Icons.delete_sweep_outlined, color: Colors.red),
-                    SizedBox(width: 8),
-                    Text(
-                      'Limpiar lienzo completo',
-                      style: TextStyle(color: Colors.red),
+            child: SingleChildScrollView(
+              scrollDirection: Axis.horizontal,
+              child: Row(
+                children: [
+                  IconButton(
+                    icon: const Icon(Icons.undo_rounded),
+                    tooltip: 'Deshacer (Ctrl+Z)',
+                    onPressed: _undoHistory.isNotEmpty ? _undo : null,
+                  ),
+                  IconButton(
+                    icon: const Icon(Icons.redo_rounded),
+                    tooltip: 'Rehacer (Ctrl+Y)',
+                    onPressed: _redoHistory.isNotEmpty ? _redo : null,
+                  ),
+                  IconButton(
+                    icon: Icon(
+                      Icons.straighten_rounded,
+                      color: _showRuler ? InkColors.primary : null,
                     ),
-                  ],
-                ),
+                    tooltip: 'Regla Virtual',
+                    onPressed: () => setState(() => _showRuler = !_showRuler),
+                  ),
+                  if (_showRuler)
+                    IconButton(
+                      icon: const Icon(Icons.rotate_right_rounded),
+                      tooltip: 'Rotar Regla (+15°)',
+                      onPressed: () {
+                        setState(() {
+                          _rulerAngle = (_rulerAngle + pi / 12) % (2 * pi);
+                        });
+                      },
+                    ),
+                  PopupMenuButton<String>(
+                    icon: const Icon(Icons.dashboard_customize_outlined),
+                    tooltip: 'Plantilla de Papel',
+                    onSelected: (template) {
+                      setState(() => _activeTemplate = template);
+                      _autoSave();
+                    },
+                    itemBuilder: (context) => const [
+                      PopupMenuItem(
+                        value: 'ruled',
+                        child: Text('Renglones con margen'),
+                      ),
+                      PopupMenuItem(
+                        value: 'grid',
+                        child: Text('Cuadrícula de ingeniería'),
+                      ),
+                      PopupMenuItem(value: 'dotted', child: Text('Punteado')),
+                      PopupMenuItem(
+                        value: 'cornell',
+                        child: Text('Notas Cornell'),
+                      ),
+                      PopupMenuItem(value: 'blank', child: Text('En Blanco')),
+                    ],
+                  ),
+                  PopupMenuButton<String>(
+                    icon: const Icon(Icons.font_download_rounded),
+                    tooltip: 'Tipografía Manuscrita ("Fuente Bonita")',
+                    onSelected: (font) {
+                      setState(() => _selectedHandwritingFont = font);
+                    },
+                    itemBuilder: (context) =>
+                        _fontManager.availableFonts.map((f) {
+                          return PopupMenuItem(
+                            value: f.name,
+                            child: Row(
+                              children: [
+                                if (_selectedHandwritingFont == f.name)
+                                  const Icon(
+                                    Icons.check_rounded,
+                                    size: 16,
+                                    color: InkColors.primary,
+                                  )
+                                else
+                                  const SizedBox(width: 16),
+                                const SizedBox(width: 8),
+                                Text(
+                                  f.displayName,
+                                  style: TextStyle(fontFamily: f.name),
+                                ),
+                              ],
+                            ),
+                          );
+                        }).toList(),
+                  ),
+                  IconButton(
+                    icon: const Icon(Icons.ios_share_rounded),
+                    tooltip: 'Exportar Nota',
+                    onPressed: _openExportDialog,
+                  ),
+                  PopupMenuButton<String>(
+                    icon: const Icon(Icons.tune_rounded),
+                    tooltip: 'Ajustes del Lienzo',
+                    onSelected: (option) {
+                      if (option == 'palm') {
+                        setState(
+                          () => _strictPalmRejection = !_strictPalmRejection,
+                        );
+                      } else if (option == 'shape') {
+                        setState(
+                          () => _autoShapeCorrection = !_autoShapeCorrection,
+                        );
+                      } else if (option == 'page_mode') {
+                        _setPageMode(!_isFixedPage);
+                      } else if (option == 'clear') {
+                        _clearCanvas();
+                      }
+                    },
+                    itemBuilder: (context) => [
+                      CheckedPopupMenuItem(
+                        value: 'palm',
+                        checked: _strictPalmRejection,
+                        child: const Text(
+                          'Rechazo estricto de palma (Solo S Pen)',
+                        ),
+                      ),
+                      CheckedPopupMenuItem(
+                        value: 'shape',
+                        checked: _autoShapeCorrection,
+                        child: const Text(
+                          'Autocorrección de formas geométricas',
+                        ),
+                      ),
+                      CheckedPopupMenuItem(
+                        value: 'page_mode',
+                        checked: _isFixedPage,
+                        child: const Text('Modo Hoja Fija (A4)'),
+                      ),
+                      const PopupMenuDivider(),
+                      const PopupMenuItem(
+                        value: 'clear',
+                        child: Row(
+                          children: [
+                            Icon(
+                              Icons.delete_sweep_outlined,
+                              color: Colors.red,
+                            ),
+                            SizedBox(width: 8),
+                            Text(
+                              'Limpiar lienzo completo',
+                              style: TextStyle(color: Colors.red),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
+                  ),
+                ],
               ),
-            ],
+            ),
           ),
         ],
       ),
-      body: Stack(
-        children: [
-          // Área interactiva con zoom y desplazamiento
-          _isLoading
-              ? const Center(child: CircularProgressIndicator())
-              : _loadError != null
-              ? Center(
-                  child: Padding(
-                    padding: const EdgeInsets.all(24),
-                    child: SelectableText(_loadError!),
-                  ),
-                )
-              : Positioned.fill(
-                  top: 64,
-                  bottom: 104,
-                  child: _buildCanvasViewport(isDark),
-                ),
-          Positioned(
-            top: 12,
-            left: 12,
-            right: 12,
-            child: Row(
-              children: [
-                Expanded(
-                  child: Align(
-                    alignment: Alignment.centerLeft,
-                    child: FilledButton.tonalIcon(
+      body: SafeArea(
+        top: false,
+        child: Column(
+          children: [
+            _buildWritingToolbar(isDark),
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 8),
+              child: Row(
+                children: [
+                  Expanded(
+                    child: TextButton.icon(
                       icon: Icon(
                         _isFixedPage
                             ? Icons.description_outlined
-                            : Icons.all_inclusive,
+                            : Icons.vertical_align_bottom,
                       ),
                       label: Text(
-                        _isFixedPage ? 'Hoja A4' : 'Lienzo infinito',
+                        _isFixedPage
+                            ? 'Hoja A4'
+                            : _isFreeCanvas
+                            ? 'Lienzo libre anterior'
+                            : 'Hoja continua',
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
                       ),
                       onPressed: () => _setPageMode(!_isFixedPage),
                     ),
                   ),
-                ),
-                IconButton.filledTonal(
-                  tooltip: 'Añadir imagen',
-                  onPressed: _importingImage ? null : _insertImage,
-                  icon: _importingImage
-                      ? const SizedBox(
-                          width: 20,
-                          height: 20,
-                          child: CircularProgressIndicator(strokeWidth: 2),
-                        )
-                      : const Icon(Icons.add_photo_alternate_outlined),
-                ),
-                const SizedBox(width: 6),
-                IconButton.filledTonal(
-                  tooltip: 'Ver todas las anotaciones',
-                  onPressed: () {
-                    _fitView();
-                    _autoSave(recordHistory: false);
-                  },
-                  icon: const Icon(Icons.fit_screen),
-                ),
-                IconButton.filledTonal(
-                  tooltip: 'Volver al inicio',
-                  onPressed: () {
-                    _fitView(origin: true);
-                    _autoSave(recordHistory: false);
-                  },
-                  icon: const Icon(Icons.home_outlined),
-                ),
-              ],
+                  IconButton(
+                    tooltip: 'Añadir imagen',
+                    onPressed: _importingImage ? null : _insertImage,
+                    icon: const Icon(Icons.add_photo_alternate_outlined),
+                  ),
+                  IconButton(
+                    tooltip: 'Ver todas las anotaciones',
+                    onPressed: () {
+                      _fitView();
+                      _autoSave(recordHistory: false);
+                    },
+                    icon: const Icon(Icons.fit_screen),
+                  ),
+                  IconButton(
+                    tooltip: 'Volver al inicio',
+                    onPressed: () {
+                      _fitView(origin: true);
+                      _autoSave(recordHistory: false);
+                    },
+                    icon: const Icon(Icons.home_outlined),
+                  ),
+                ],
+              ),
             ),
-          ),
-          Positioned(
-            bottom: 108,
-            left: 16,
-            right: 16,
-            child: IgnorePointer(
+            Expanded(
+              child: Stack(
+                children: [
+                  Positioned.fill(
+                    child: _isLoading
+                        ? const Center(child: CircularProgressIndicator())
+                        : _loadError != null
+                        ? Center(
+                            child: Padding(
+                              padding: const EdgeInsets.all(24),
+                              child: SelectableText(_loadError!),
+                            ),
+                          )
+                        : _buildCanvasViewport(isDark),
+                  ),
+                  if (_activeSelection.isNotEmpty &&
+                      _selectionBoundingBox != null)
+                    _buildLassoActionToolbar(isDark),
+                ],
+              ),
+            ),
+            Padding(
+              padding: const EdgeInsets.symmetric(vertical: 4),
               child: Text(
-                '${(_zoom * 100).round()}% · S Pen para escribir · Dedos para mover y ampliar',
+                '${(_zoom * 100).round()}% · ${_activeWidth.toStringAsFixed(1)} pt · S Pen: escribir · Dedos: desplazar',
                 textAlign: TextAlign.center,
                 style: TextStyle(
                   fontSize: 11,
@@ -1764,42 +1924,50 @@ class _CanvasScreenState extends ConsumerState<CanvasScreen>
                 ),
               ),
             ),
-          ),
-
-          // Barra contextual flotante cuando hay trazos seleccionados con lazo
-          if (_activeSelection.isNotEmpty && _selectionBoundingBox != null)
-            _buildLassoActionToolbar(isDark),
-
-          // Barra flotante inferior de herramientas para stylus
-          Positioned(
-            left: 20,
-            right: 20,
-            bottom: 24,
-            child: SingleChildScrollView(
-              scrollDirection: Axis.horizontal,
-              child: Center(child: _buildFloatingToolbar(isDark)),
-            ),
-          ),
-        ],
+          ],
+        ),
       ),
     );
   }
 
   Widget _buildCanvasViewport(bool isDark) => LayoutBuilder(
     builder: (context, constraints) {
+      final oldSize = _viewportSize;
       _viewportSize = constraints.biggest;
+      if (_hasViewport &&
+          _cameraInitialized &&
+          _isVerticalPage &&
+          oldSize.width != _viewportSize.width) {
+        final previousFit = ((oldSize.width - 24) / 820).clamp(0.1, 5.0);
+        final top = max(0.0, _toScene(Offset.zero).dy);
+        final scale = (_fitWidthScale * _zoom / previousFit).clamp(
+          _fitWidthScale,
+          5.0,
+        );
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (!mounted) return;
+          _transformationController.value = Matrix4.identity()
+            ..setEntry(0, 0, scale)
+            ..setEntry(1, 1, scale)
+            ..setEntry(0, 3, (_viewportSize.width - 820 * scale) / 2)
+            ..setEntry(1, 3, 12 - top * scale);
+        });
+      }
       if (!_cameraInitialized) {
         _cameraInitialized = true;
         WidgetsBinding.instance.addPostFrameCallback((_) {
           if (mounted) {
-            if (_isFixedPage) _fitView();
+            _fitView(origin: true);
           }
         });
       }
+      _hasViewport = true;
       final transform = _transformationController.value;
       final visible = _visibleRect;
       return InfiniteCanvasViewport(
         controller: _transformationController,
+        pageWidth: _isFreeCanvas ? null : 820,
+        pageHeight: _isFixedPage ? 1160 : null,
         navigationEnabled: _drawingPointer == null,
         onNavigationEnd: () => _autoSave(recordHistory: false),
         child: Listener(
@@ -1836,6 +2004,7 @@ class _CanvasScreenState extends ConsumerState<CanvasScreen>
                       strokes: const [],
                       templateId: _activeTemplate,
                       isFixedPage: _isFixedPage,
+                      isVerticalPage: _isVerticalPage,
                       viewTransform: transform,
                       visibleRect: visible,
                       paperColor: isDark
@@ -1857,6 +2026,7 @@ class _CanvasScreenState extends ConsumerState<CanvasScreen>
                       activeStroke: _currentStroke,
                       textAnnotations: _textAnnotations,
                       templateId: 'blank',
+                      isVerticalPage: _isVerticalPage,
                       paperColor: Colors.transparent,
                       viewTransform: transform,
                       visibleRect: visible,
@@ -1974,218 +2144,212 @@ class _CanvasScreenState extends ConsumerState<CanvasScreen>
     );
   }
 
-  Widget _buildFloatingToolbar(bool isDark) {
-    return SingleChildScrollView(
-      scrollDirection: Axis.horizontal,
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-        decoration: BoxDecoration(
-          color: isDark ? InkColors.surfaceDark : Colors.white,
-          borderRadius: InkSpacing.roundedFull,
-          border: Border.all(
-            color: isDark ? InkColors.borderDark : InkColors.borderLight,
-          ),
-          boxShadow: InkSpacing.elevationFloatingToolbar,
-        ),
-        child: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            // Bolígrafo
-            _buildToolButton(
-              tool: DrawingToolType.pen,
-              icon: Icons.edit_rounded,
-              tooltip: 'Bolígrafo',
-            ),
-            // Pluma Caligráfica
-            _buildToolButton(
-              tool: DrawingToolType.fountainPen,
-              icon: Icons.history_edu_rounded,
-              tooltip: 'Pluma Caligráfica',
-            ),
-            // Lápiz
-            _buildToolButton(
-              tool: DrawingToolType.pencil,
-              icon: Icons.create_rounded,
-              tooltip: 'Lápiz Grafito',
-            ),
-            // Pincel
-            _buildToolButton(
-              tool: DrawingToolType.brush,
-              icon: Icons.brush_rounded,
-              tooltip: 'Pincel Artístico',
-            ),
-            // Resaltador
-            _buildToolButton(
-              tool: DrawingToolType.highlighter,
-              icon: Icons.border_color_rounded,
-              tooltip: 'Resaltador',
-            ),
-            // Borrador por trazo
-            _buildToolButton(
-              tool: DrawingToolType.eraser,
-              icon: Icons.cleaning_services_rounded,
-              tooltip: 'Borrador de Trazo',
-            ),
-            // Borrador de píxeles
-            _buildToolButton(
-              tool: DrawingToolType.pixelEraser,
-              icon: Icons.auto_fix_normal_rounded,
-              tooltip: 'Borrador de Precisión',
-            ),
-            // Lazo de selección
-            _buildToolButton(
-              tool: DrawingToolType.lasso,
-              icon: Icons.gesture_rounded,
-              tooltip: 'Lazo de Selección',
-            ),
-            const SizedBox(width: 4),
-            Container(
-              height: 24,
-              width: 1,
-              color: Colors.grey.withValues(alpha: 0.3),
-            ),
-            const SizedBox(width: 4),
-            // Gotero (Eyedropper)
-            IconButton(
-              icon: Icon(
-                Icons.colorize_rounded,
-                size: 20,
-                color: _isEyedropperActive ? InkColors.accent : null,
-              ),
-              tooltip: 'Gotero (Muestrear color del lienzo)',
-              onPressed: () {
-                setState(() => _isEyedropperActive = !_isEyedropperActive);
-                if (_isEyedropperActive) {
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(
-                      content: Text(
-                        'Modo Gotero activo: toca cualquier trazo para tomar su color',
+  void _choosePen() {
+    showModalBottomSheet(
+      context: context,
+      showDragHandle: true,
+      builder: (context) => SafeArea(
+        child: SingleChildScrollView(
+          child: Padding(
+            padding: const EdgeInsets.all(20),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'Tipo de lápiz',
+                  style: Theme.of(context).textTheme.titleLarge,
+                ),
+                const SizedBox(height: 16),
+                Wrap(
+                  spacing: 8,
+                  runSpacing: 8,
+                  children: [
+                    for (final item in const [
+                      (DrawingToolType.pen, 'Bolígrafo'),
+                      (DrawingToolType.fountainPen, 'Pluma Caligráfica'),
+                      (DrawingToolType.pencil, 'Lápiz Grafito'),
+                      (DrawingToolType.brush, 'Pincel Artístico'),
+                      (DrawingToolType.highlighter, 'Resaltador'),
+                    ])
+                      ChoiceChip(
+                        label: Text(item.$2),
+                        selected: _activeTool == item.$1,
+                        onSelected: (_) {
+                          setState(() {
+                            _activeTool = item.$1;
+                            _isEyedropperActive = false;
+                            _clearSelection();
+                          });
+                          Navigator.pop(context);
+                        },
                       ),
-                      duration: Duration(seconds: 2),
-                    ),
-                  );
-                }
-              },
-            ),
-            // Paleta avanzada HSV / HEX
-            IconButton(
-              icon: const Icon(Icons.palette_rounded, size: 20),
-              tooltip: 'Paleta Avanzada HSV / HEX',
-              onPressed: _openColorPicker,
-            ),
-            // Paleta de colores rápidos
-            ...InkColors.defaultInkPalette.take(4).map((color) {
-              final isSelected =
-                  _activeColor == color &&
-                  _activeTool != DrawingToolType.eraser &&
-                  _activeTool != DrawingToolType.pixelEraser &&
-                  _activeTool != DrawingToolType.lasso;
-              return IconButton(
-                tooltip:
-                    'Tinta #${color.toARGB32().toRadixString(16).substring(2).toUpperCase()}',
-                isSelected: isSelected,
-                onPressed: () {
-                  setState(() {
-                    _activeColor = color;
-                    _paletteManager.addRecentColor(color);
-                    _isEyedropperActive = false;
-                    if (_activeTool == DrawingToolType.eraser ||
-                        _activeTool == DrawingToolType.pixelEraser ||
-                        _activeTool == DrawingToolType.lasso) {
-                      _activeTool = DrawingToolType.pen;
-                    }
-                  });
-                },
-                icon: Container(
-                  width: 24,
-                  height: 24,
-                  decoration: BoxDecoration(
-                    color: color,
-                    shape: BoxShape.circle,
-                    border: Border.all(
-                      color: isSelected ? InkColors.primary : Colors.white,
-                      width: isSelected ? 3 : 1,
-                    ),
-                  ),
-                ),
-              );
-            }),
-            const SizedBox(width: 4),
-            Container(
-              height: 24,
-              width: 1,
-              color: Colors.grey.withValues(alpha: 0.3),
-            ),
-            const SizedBox(width: 4),
-            // Stickers
-            IconButton(
-              icon: const Icon(Icons.interests_rounded, size: 20),
-              tooltip: 'Biblioteca de Stickers',
-              onPressed: _openStickerSheet,
-            ),
-            // Insertar Texto tipado
-            IconButton(
-              icon: const Icon(Icons.text_fields_rounded, size: 20),
-              tooltip: 'Insertar Texto en Lienzo',
-              onPressed: _addTypedTextAtCenter,
-            ),
-            // Insertar Imagen
-            IconButton(
-              icon: const Icon(Icons.image_outlined, size: 20),
-              tooltip: 'Insertar Imagen en Lienzo',
-              onPressed: _insertImage,
-            ),
-            // Grosor de trazo
-            PopupMenuButton<double>(
-              icon: const Icon(Icons.line_weight_rounded, size: 20),
-              tooltip: 'Grosor de trazo',
-              onSelected: (width) => setState(() => _activeWidth = width),
-              itemBuilder: (context) => [
-                const PopupMenuItem(
-                  value: 1.5,
-                  child: Text('Extra Fino (1.5 pt)'),
-                ),
-                const PopupMenuItem(value: 3.0, child: Text('Fino (3.0 pt)')),
-                const PopupMenuItem(value: 5.0, child: Text('Medio (5.0 pt)')),
-                const PopupMenuItem(value: 8.0, child: Text('Grueso (8.0 pt)')),
-                const PopupMenuItem(
-                  value: 14.0,
-                  child: Text('Marcador (14.0 pt)'),
+                  ],
                 ),
               ],
             ),
-          ],
+          ),
         ),
       ),
     );
   }
 
-  Widget _buildToolButton({
-    required DrawingToolType tool,
-    required IconData icon,
-    required String tooltip,
-  }) {
-    final isSelected = _activeTool == tool;
-
-    return IconButton(
-      icon: Icon(icon, size: 20),
-      tooltip: tooltip,
-      color: isSelected ? InkColors.primary : Colors.grey.shade600,
-      style: isSelected
-          ? IconButton.styleFrom(
-              backgroundColor: InkColors.primary.withValues(alpha: 0.14),
-            )
-          : null,
-      onPressed: () {
-        setState(() {
-          _activeTool = tool;
-          if (tool != DrawingToolType.lasso) {
-            _clearSelection();
-          }
-        });
-      },
+  void _chooseWidth() {
+    showModalBottomSheet(
+      context: context,
+      showDragHandle: true,
+      builder: (context) => SafeArea(
+        child: StatefulBuilder(
+          builder: (context, update) => Padding(
+            padding: const EdgeInsets.all(20),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text(
+                  'Grosor de tinta: ${_activeWidth.toStringAsFixed(1)} pt',
+                  style: Theme.of(context).textTheme.titleLarge,
+                ),
+                Slider(
+                  value: _activeWidth,
+                  min: 1,
+                  max: 20,
+                  divisions: 38,
+                  label: '${_activeWidth.toStringAsFixed(1)} pt',
+                  onChanged: (value) {
+                    setState(() => _activeWidth = value);
+                    update(() {});
+                  },
+                ),
+                const Text('Desliza para elegir el grosor del lápiz.'),
+              ],
+            ),
+          ),
+        ),
+      ),
     );
   }
+
+  Widget _buildWritingToolbar(bool isDark) => Material(
+    color: isDark ? InkColors.surfaceDark : Colors.white,
+    elevation: 1,
+    child: LayoutBuilder(
+      builder: (context, constraints) {
+        final controls = <Widget>[
+          TextButton.icon(
+            key: const ValueKey('choose-pen'),
+            onPressed: _choosePen,
+            icon: const Icon(Icons.edit_rounded),
+            label: const Text('Lápiz'),
+          ),
+          TextButton.icon(
+            onPressed: () => setState(() {
+              _activeTool = DrawingToolType.eraser;
+              _isEyedropperActive = false;
+              _clearSelection();
+            }),
+            icon: Icon(
+              Icons.cleaning_services_rounded,
+              color: _activeTool == DrawingToolType.eraser
+                  ? InkColors.primary
+                  : null,
+            ),
+            label: const Text('Borrador'),
+          ),
+          TextButton.icon(
+            onPressed: () => setState(() {
+              _activeTool = DrawingToolType.lasso;
+              _isEyedropperActive = false;
+            }),
+            icon: const Icon(Icons.gesture_rounded),
+            label: const Text('Lazo'),
+          ),
+          TextButton.icon(
+            key: const ValueKey('choose-ink-color'),
+            onPressed: _openColorPicker,
+            icon: Container(
+              width: 22,
+              height: 22,
+              decoration: BoxDecoration(
+                color: _activeColor,
+                shape: BoxShape.circle,
+                border: Border.all(color: Colors.grey),
+              ),
+            ),
+            label: const Text('Color'),
+          ),
+          TextButton.icon(
+            key: const ValueKey('choose-ink-width'),
+            onPressed: _chooseWidth,
+            icon: const Icon(Icons.line_weight_rounded),
+            label: const Text('Grosor'),
+          ),
+          PopupMenuButton<String>(
+            tooltip: 'Más herramientas',
+            onSelected: (value) {
+              if (value == 'sticker') {
+                _openStickerSheet();
+              }
+              if (value == 'text') {
+                _addTypedTextAtCenter();
+              }
+              if (value == 'pixel') {
+                setState(() {
+                  _activeTool = DrawingToolType.pixelEraser;
+                  _isEyedropperActive = false;
+                });
+              }
+              if (value == 'dropper') {
+                setState(() => _isEyedropperActive = !_isEyedropperActive);
+              }
+            },
+            itemBuilder: (_) => const [
+              PopupMenuItem(
+                value: 'sticker',
+                child: Text('Biblioteca de Stickers'),
+              ),
+              PopupMenuItem(
+                value: 'text',
+                child: Text('Insertar Texto en Lienzo'),
+              ),
+              PopupMenuItem(
+                value: 'pixel',
+                child: Text('Borrador de Precisión'),
+              ),
+              PopupMenuItem(value: 'dropper', child: Text('Gotero')),
+            ],
+            child: const Padding(
+              padding: EdgeInsets.symmetric(horizontal: 8, vertical: 12),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Icon(Icons.more_horiz),
+                  SizedBox(width: 4),
+                  Text('Más'),
+                ],
+              ),
+            ),
+          ),
+        ];
+        final count =
+            constraints.maxWidth >= 700 &&
+                MediaQuery.textScalerOf(context).scale(14) < 20
+            ? 6
+            : 3;
+        return Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            for (var start = 0; start < controls.length; start += count)
+              Row(
+                children: [
+                  for (final control in controls.skip(start).take(count))
+                    Expanded(child: control),
+                ],
+              ),
+          ],
+        );
+      },
+    ),
+  );
 }
 
 /// El historial comparte objetos inmutables; evita duplicar todos los puntos en JSON.
@@ -2196,6 +2360,7 @@ class _CanvasSnapshot {
   final List<CanvasImage> images;
   final String template;
   final bool fixed;
+  final bool free;
   _CanvasSnapshot(
     this.strokes,
     this.text,
@@ -2203,6 +2368,7 @@ class _CanvasSnapshot {
     this.images,
     this.template,
     this.fixed,
+    this.free,
   );
   bool sameAs(_CanvasSnapshot other) =>
       listEquals(strokes, other.strokes) &&
@@ -2210,5 +2376,6 @@ class _CanvasSnapshot {
       listEquals(stickers, other.stickers) &&
       listEquals(images, other.images) &&
       template == other.template &&
-      fixed == other.fixed;
+      fixed == other.fixed &&
+      free == other.free;
 }

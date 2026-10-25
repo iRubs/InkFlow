@@ -2,6 +2,7 @@
 
 App Flutter de apuntes locales para Windows y Android. Proyecto de código abierto bajo MIT; los componentes de terceros conservan sus propias licencias.
 
+- [Actualización 1.3: hoja continua vertical y herramientas visibles](docs/UPDATE_1.3.md)
 - [Actualización 1.2: organización y paletas guardadas](docs/UPDATE_1.2.md)
 - [Actualización 1.1: imágenes y lienzo infinito](docs/UPDATE_1.1.md)
 - [Instalación y builds](docs/INSTALLATION.md)

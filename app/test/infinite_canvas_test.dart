@@ -70,9 +70,13 @@ void main() {
       final camera = tester
           .widget<InfiniteCanvasViewport>(find.byType(InfiniteCanvasViewport))
           .controller;
-      camera.value = Matrix4.diagonal3Values(0.1, 0.1, 1)
-        ..setEntry(0, 3, -5000)
-        ..setEntry(1, 3, 2000);
+      final viewportWidth = tester
+          .getSize(find.byKey(const ValueKey('ink-canvas-input')))
+          .width;
+      final fit = (viewportWidth - 24) / 820;
+      camera.value = Matrix4.diagonal3Values(fit, fit, 1)
+        ..setEntry(0, 3, 12)
+        ..setEntry(1, 3, -5000);
       await tester.pump();
       await tester.tap(find.byTooltip('Añadir imagen'));
       for (var i = 0; i < 30 && find.byType(Image).evaluate().isEmpty; i++) {
@@ -106,7 +110,7 @@ void main() {
   );
 
   testWidgets(
-    'Lienzo sin límites: coordenadas lejanas, dedos y zoom sin desplazar la tinta',
+    'Hoja continua: desplazamiento vertical y zoom conservan la tinta',
     (tester) async {
       await tester.pumpWidget(
         ProviderScope(
@@ -124,8 +128,8 @@ void main() {
           .widget<InfiniteCanvasViewport>(find.byType(InfiniteCanvasViewport))
           .controller;
       camera.value = Matrix4.diagonal3Values(2, 2, 1)
-        ..setEntry(0, 3, -10000)
-        ..setEntry(1, 3, 7000);
+        ..setEntry(0, 3, -100)
+        ..setEntry(1, 3, -7000);
       await tester.pump();
       final input = find.byKey(const ValueKey('ink-canvas-input'));
       final origin = tester.getTopLeft(input);
@@ -135,8 +139,8 @@ void main() {
       await pen.up();
       await tester.pump();
       final stroke = ink(tester).strokes.single;
-      expect(stroke.points.first.x, closeTo(5100, 0.01));
-      expect(stroke.points.first.y, closeTo(-3410, 0.01));
+      expect(stroke.points.first.x, closeTo(150, 0.01));
+      expect(stroke.points.first.y, closeTo(3590, 0.01));
       final before = camera.value.clone();
       await tester.dragFrom(
         origin + const Offset(300, 250),
@@ -316,7 +320,7 @@ void main() {
         .controller;
     expect(camera.value.entry(0, 3), 5000);
     expect(camera.value.entry(1, 3), 7000);
-    expect(find.text('Lienzo infinito'), findsOneWidget);
+    expect(find.text('Lienzo libre anterior'), findsOneWidget);
     await tester.pumpWidget(const SizedBox());
     await tester.runAsync(() => temp.delete(recursive: true));
   });

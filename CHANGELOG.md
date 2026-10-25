@@ -3,6 +3,15 @@
 Todos los cambios notables del proyecto se documentan aquí.
 Formato basado en [Keep a Changelog](https://keepachangelog.com/es-ES/1.1.0/).
 
+## [1.3.0+4] — 2026-10-24
+- Hoja continua de ancho fijo 820, adaptada a pantalla, con desplazamiento hacia abajo y límites laterales/superior.
+- Encaje de ancho inicial y tras rotación; zoom limitado al papel y exportación vertical sin columnas adicionales.
+- Barra superior de escritura adaptable con Lápiz, Borrador, Lazo, Color, Grosor y Más visibles.
+- Selección de cinco tipos de lápiz y grosor continuo de 1 a 20 pt; acceso directo a HSV/HEX y paletas guardadas.
+- Trazos, inserción/movimiento de imágenes y stickers y ampliación de imágenes acotados al ancho del papel.
+- Conservación de lienzos antiguos con contenido exterior y de su cámara; deshacer/rehacer conserva el modo libre.
+- Nueva guía de uso de la actualización y pruebas de gestos, rotación, tamaño de texto y controles de tinta.
+
 ## [1.2.0+3] — 2026-10-20
 - Biblioteca de páginas global y por sección, favoritos, búsqueda por título/etiqueta y filtros/ordenación.
 - Creación/asignación/renombrado/eliminación de etiquetas sin duplicar nombres por mayúsculas; búsqueda Unicode y validación transaccional.
